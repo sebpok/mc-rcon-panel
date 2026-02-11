@@ -135,28 +135,30 @@ type SelectedItem struct {
 func ParseSelectedItem(input string) (SelectedItem, error) {
 	input = strings.TrimSpace(input)
 
-	// przypadek "brak elementu"
 	if strings.Contains(input, "Found no elements matching SelectedItem") || input == "{}" {
 		return SelectedItem{Empty: true}, nil
 	}
 
-	// regex dopasowuje ID i count niezależnie od dodatkowych pól
-	re := regexp.MustCompile(`id:\s*"minecraft:([^"]+)",\s*count:\s*(\d+)`)
-	m := re.FindStringSubmatch(input)
-	if len(m) != 3 {
-		return SelectedItem{Empty: true}, fmt.Errorf("could not parse SelectedItem: %q", input)
+	reID := regexp.MustCompile(`id:\s*"([^"]+)"`)
+	reCount := regexp.MustCompile(`count:\s*(\d+)`)
+
+	idMatch := reID.FindStringSubmatch(input)
+	countMatch := reCount.FindStringSubmatch(input)
+
+	if idMatch == nil || countMatch == nil {
+		return SelectedItem{}, errors.New("invalid selected item output")
 	}
 
-	count, _ := strconv.Atoi(m[2])
-
-	// sprawdzamy, czy są dodatkowe komponenty
-	hasExtra := strings.Contains(input, "components:") || strings.Contains(input, "Enchantments") || strings.Contains(input, "custom_name")
+	strconvCount, err := strconv.Atoi(countMatch[1])
+	if err != nil {
+		return SelectedItem{}, fmt.Errorf("invalid count value: %v", err)
+	}
 
 	return SelectedItem{
-		ID:       m[1],
-		Count:    count,
+		ID:       idMatch[1],
+		Count:    strconvCount,
 		Empty:    false,
-		HasExtra: hasExtra,
+		HasExtra: false,
 	}, nil
 }
 

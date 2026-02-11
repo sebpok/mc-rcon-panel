@@ -80,7 +80,6 @@ type Model struct {
 	tabs 			[]string
 
 	pingMs  int64
-	tps     [3]float64
 	daytime string
 	version string
 	logs    []string
@@ -113,7 +112,7 @@ func NewModel(client *rcon.Client, host string, refreshRateInSeconds int) Model 
 	}
 
 	p := &Popup{
-		width:   50,
+		width:   60,
 		height:  5,
 		shown:   false,
 		options: []PopupOptions{
@@ -220,17 +219,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tickCmd()
 			}
 			m.daytime = mc.ParseTime(resp)
-
-			// FETCH TPS
-			resp, err = m.rcon.Exec("tps")
-			if err != nil {
-				m.err = err
-				return m, tickCmd()
-			}
-			t1, t5, t15 := mc.ParseTPS(resp)
-			m.tps[0] = t1
-			m.tps[1] = t5
-			m.tps[2] = t15
 
 			// FETCH PING
 			_, ping, err := mc.Ping(m.host, "25565")
@@ -446,20 +434,6 @@ func (m Model) View() string {
 		infoItemValue.Render(m.daytime),
 	)
 
-	var tpsColor string
-	if m.tps[0] <= 17 {
-		tpsColor = m.colors.yellow
-	} else if m.tps[0] <= 14 {
-		tpsColor = m.colors.red
-	} else {
-		tpsColor = m.colors.green
-	}
-	tpsInfoBoxContent := lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		infoItemLabel.Render("TPS:"),
-		infoItemValue.Foreground(lipgloss.Color(tpsColor)).Render(fmt.Sprintf("%.2f", m.tps[0])),
-	)
-
 	pingInfoBoxContent := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		infoItemLabel.Render("Ping:"),
@@ -474,7 +448,6 @@ func (m Model) View() string {
 
 		slotsInfoBoxContent,
 		daytimeInfoBoxContent,
-		tpsInfoBoxContent,
 		pingInfoBoxContent,
 	)
 	
