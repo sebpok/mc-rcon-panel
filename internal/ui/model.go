@@ -414,7 +414,7 @@ func (m Model) View() string {
 
 	versionInfoBoxContent := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		infoItemLabel.Render("Version:"),
+		infoItemLabel.Render("Ver:"),
 		infoItemValue.Render(m.version),
 	)
 
@@ -443,7 +443,7 @@ func (m Model) View() string {
 
 		slotsInfoBoxContent,
 		pingInfoBoxContent,
-		motdInfoBoxContent.Render(m.motd),
+		motdInfoBoxContent.Render("MOTD: " + m.motd),
 	)
 	
 	// players
