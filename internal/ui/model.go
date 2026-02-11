@@ -187,7 +187,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = err
 				return m, tickCmd()
 			}
-			current := mc.ParsePlayers(resp, false)
+			current := mc.ParsePlayers(resp)
 			joined := mc.DiffAdded(m.prevPlayers, current)
 			left := mc.DiffRemoved(m.prevPlayers, current)
 			for _, p := range joined {
@@ -702,8 +702,28 @@ func (m *Model) AppendLog(log string) {
 func (m *Model) FetchPlayerDetails() {
 	playerName := m.players[m.playerActiveIndex]
 
+	//check if player is still online
+	resp, err := m.rcon.Exec("list")
+	if err != nil {
+		m.err = err
+		return
+	}
+	var isPlayerOnline bool
+	players := mc.ParsePlayers(resp)
+	for _, p := range players {
+		if p == playerName {
+			isPlayerOnline = true
+			break
+		}
+	}
+	if !isPlayerOnline {
+		m.popup.shown = false
+		m.AppendLog(fmt.Sprintf("%s is no longer online", playerName))
+		return
+	}
+
 	// position
-	resp, err := m.rcon.Exec(fmt.Sprintf("data get entity %s Pos", playerName))
+	resp, err = m.rcon.Exec(fmt.Sprintf("data get entity %s Pos", playerName))
 	if err != nil {
 		m.err = err
 		return

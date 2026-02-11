@@ -2,10 +2,10 @@ package mc
 
 import "strings"
 
-func ParsePlayers(resp string, test bool) []string {
-	if test {
-		resp = "There are 2 of a max 20 players online: Player1, Player2, Player3, Player4"
-	}
+func ParsePlayers(resp string) []string {
+	// if test {
+	// 	resp = "There are 2 of a max 20 players online: Player1, Player2, Player3, Player4"
+	// }
 
 	if !strings.Contains(resp, ":") {
 		return nil
