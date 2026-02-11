@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -72,16 +73,18 @@ type Model struct {
 
 	prevPlayers []string
 	players     []string
-	slots       string
-
 	playerActiveIndex int
+
+
 
 	tabActiveIndex    int
 	tabs 			[]string
 
 	pingMs  int64
-	daytime string
 	version string
+	slots   string
+	motd    string
+
 	logs    []string
 	logBlockYSize int
 	err     error
@@ -208,6 +211,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pingMs = ping.Milliseconds()
 			m.version = data.Version.Name
 			m.slots = fmt.Sprintf("%d/%d", data.Players.Online, data.Players.Max)
+
+			var motd string
+			err = json.Unmarshal(data.Description, &motd)
+			if err != nil {
+				m.err = err
+				return m, tickCmd()
+			}
+			m.motd = motd
 
 			m.refreshIn = m.refreshRate
 		}
@@ -400,15 +411,17 @@ func (m Model) View() string {
 		Height(1).
 		Foreground(lipgloss.Color(m.colors.textDimmedDark))
 
-	slotsInfoBoxContent := lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		infoItemLabel.Render("Slots:"),
-		infoItemValue.Render(m.slots),
-	)
+
 	versionInfoBoxContent := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		infoItemLabel.Render("Version:"),
 		infoItemValue.Render(m.version),
+	)
+
+	slotsInfoBoxContent := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		infoItemLabel.Render("Slots:"),
+		infoItemValue.Render(m.slots),
 	)
 
 	pingInfoBoxContent := lipgloss.JoinHorizontal(
@@ -416,6 +429,11 @@ func (m Model) View() string {
 		infoItemLabel.Render("Ping:"),
 		infoItemValue.Render(fmt.Sprintf("%d ms", m.pingMs)),
 	)
+
+	motdInfoBoxContent := lipgloss.NewStyle().
+		Width(leftColumnWidth - 2).
+		Align(lipgloss.Left).
+		Foreground(lipgloss.Color(m.colors.textDimmedDark))
 
 	infoBoxContent := lipgloss.JoinVertical(
 		lipgloss.Top,
@@ -425,10 +443,10 @@ func (m Model) View() string {
 
 		slotsInfoBoxContent,
 		pingInfoBoxContent,
+		motdInfoBoxContent.Render(m.motd),
 	)
 	
 	// players
-
 	playerPopup := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(m.colors.borderDark)).
