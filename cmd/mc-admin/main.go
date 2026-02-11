@@ -12,8 +12,9 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", "localhost:25575", "RCON address")
-	pass := flag.String("pass", "kopbes", "RCON password")
+	host := flag.String("host", "localhost", "RCON address")
+	port := flag.Int("port", 25575, "RCON port")
+	pass := flag.String("password", "", "RCON password")
 	flag.Parse()
 
 	if *pass == "" {
@@ -21,7 +22,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	client, err := rcon.Connect(*addr, *pass)
+	addr := fmt.Sprintf("%s:%d", *host, *port)
+
+	client, err := rcon.Connect(addr, *pass)
 	if err != nil {
 		fmt.Println("RCON connection error:", err)
 		os.Exit(1)
