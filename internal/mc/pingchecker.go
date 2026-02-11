@@ -36,12 +36,19 @@ func Ping(host string, port string) (StatusResponse, time.Duration, error) {
 
 	// 3. Właściwy Ping (pakiet bot)
 	// PingAndList zwraca surowe bajty (data), opóźnienie (delay) i błąd
-	_, delay, err := bot.PingAndList(address)
+	data, delay, err := bot.PingAndList(address)
 	if err != nil {
 		return StatusResponse{}, 0, err
 	}
 
-	return StatusResponse{}, delay, nil
+	// 4. Parsowanie JSON
+	var status StatusResponse
+	err = json.Unmarshal(data, &status)
+	if err != nil {
+		return StatusResponse{}, 0, fmt.Errorf("nie można sparsować odpowiedzi JSON: %v", err)
+	}
+
+	return status, delay, nil
 
 	// 5. Wyniki
 	// fmt.Println("--- Sukces ---")

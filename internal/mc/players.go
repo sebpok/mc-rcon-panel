@@ -2,17 +2,6 @@ package mc
 
 import "strings"
 
-// returns "{online}/{totalSlots}"
-func GetSlotsStatus(resp string) string {
-	parts := strings.Fields(resp)
-
-	if len(parts) > 7 {
-		return parts[2] + "/" + parts[7]
-	}
-
-	return "0/0"
-}
-
 func ParsePlayers(resp string, test bool) []string {
 	if test {
 		resp = "There are 2 of a max 20 players online: Player1, Player2, Player3, Player4"

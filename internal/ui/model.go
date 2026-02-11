@@ -188,7 +188,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tickCmd()
 			}
 			current := mc.ParsePlayers(resp, false)
-
 			joined := mc.DiffAdded(m.prevPlayers, current)
 			left := mc.DiffRemoved(m.prevPlayers, current)
 			for _, p := range joined {
@@ -200,33 +199,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.prevPlayers = current
 			m.players = current
 
-			m.slots = mc.GetSlotsStatus(resp)
-
-			// VERSION FETCH
-			if m.version == "" {
-				resp, err = m.rcon.Exec("version")
-				if err != nil {
-					m.err = err
-					return m, tickCmd()
-				}
-				m.version = mc.ParseVersion(resp)
-			}
-
-			// DAYTIME IN MC FETCH
-			resp, err = m.rcon.Exec("time query daytime")
-			if err != nil {
-				m.err = err
-				return m, tickCmd()
-			}
-			m.daytime = mc.ParseTime(resp)
-
-			// FETCH PING
-			_, ping, err := mc.Ping(m.host, "25565")
+			// FETCH MC SPECIFIC REQUEST DATA
+			data, ping, err := mc.Ping(m.host, "25565")
 			if err != nil {
 				m.err = err
 				return m, tickCmd()
 			}
 			m.pingMs = ping.Milliseconds()
+			m.version = data.Version.Name
+			m.slots = fmt.Sprintf("%d/%d", data.Players.Online, data.Players.Max)
+
 			m.refreshIn = m.refreshRate
 		}
 		return m, tickCmd()
@@ -425,13 +407,8 @@ func (m Model) View() string {
 	)
 	versionInfoBoxContent := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		infoItemLabel.Render("Server:"),
+		infoItemLabel.Render("Version:"),
 		infoItemValue.Render(m.version),
-	)
-	daytimeInfoBoxContent := lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		infoItemLabel.Render("MC Time:"),
-		infoItemValue.Render(m.daytime),
 	)
 
 	pingInfoBoxContent := lipgloss.JoinHorizontal(
@@ -447,7 +424,6 @@ func (m Model) View() string {
 		separatorStyle.Render(strings.Repeat("-", leftColumnWidth-2)),
 
 		slotsInfoBoxContent,
-		daytimeInfoBoxContent,
 		pingInfoBoxContent,
 	)
 	
