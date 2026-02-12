@@ -16,6 +16,16 @@ import (
 
 type tickMsg time.Time
 
+type Styles struct {
+	borderColor       lipgloss.Color
+	borderColorActive lipgloss.Color
+
+	inputField lipgloss.Style
+}
+
+func DefaultStyles() *Styles {
+}
+
 type Colors struct {
 	// usage / in what theme
 	textDark         string
@@ -37,7 +47,7 @@ type Colors struct {
 
 type PopupOptions struct {
 	label string
-	cmd string
+	cmd   string
 	color string
 }
 
@@ -61,7 +71,7 @@ type Popup struct {
 
 	player PlayerSnapshot
 
-	options []PopupOptions
+	options           []PopupOptions
 	activeOptionIndex int
 }
 
@@ -71,23 +81,21 @@ type Model struct {
 	host string
 	port string
 
-	prevPlayers []string
-	players     []string
+	prevPlayers       []string
+	players           []string
 	playerActiveIndex int
 
-
-
-	tabActiveIndex    int
-	tabs 			[]string
+	tabActiveIndex int
+	tabs           []string
 
 	pingMs  int64
 	version string
 	slots   string
 	motd    string
 
-	logs    []string
+	logs          []string
 	logBlockYSize int
-	err     error
+	err           error
 
 	input textinput.Model
 	popup *Popup
@@ -115,9 +123,9 @@ func NewModel(client *rcon.Client, host string, refreshRateInSeconds int) Model 
 	}
 
 	p := &Popup{
-		width:   60,
-		height:  5,
-		shown:   false,
+		width:  60,
+		height: 5,
+		shown:  false,
 		options: []PopupOptions{
 			{
 				label: "kick",
@@ -142,16 +150,16 @@ func NewModel(client *rcon.Client, host string, refreshRateInSeconds int) Model 
 	ti.Width = 40
 
 	return Model{
-		rcon:        client,
-		logs:        make([]string, 0),
-		colors:      c,
-		refreshRate: refreshRateInSeconds,
-		refreshIn:   0,
-		host:        host,
-		input:       ti,
+		rcon:              client,
+		logs:              make([]string, 0),
+		colors:            c,
+		refreshRate:       refreshRateInSeconds,
+		refreshIn:         0,
+		host:              host,
+		input:             ti,
 		playerActiveIndex: 0,
 
-		tabs: []string{"players", "cmds"},
+		tabs:           []string{"players", "cmds"},
 		tabActiveIndex: 0,
 
 		popup: p,
@@ -411,7 +419,6 @@ func (m Model) View() string {
 		Height(1).
 		Foreground(lipgloss.Color(m.colors.textDimmedDark))
 
-
 	versionInfoBoxContent := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		infoItemLabel.Render("Ver:"),
@@ -424,10 +431,17 @@ func (m Model) View() string {
 		infoItemValue.Render(m.slots),
 	)
 
+	var pingColor string
+	if m.pingMs < 30 {
+		pingColor = m.colors.green
+	} else {
+		pingColor = m.colors.yellow
+	}
+
 	pingInfoBoxContent := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		infoItemLabel.Render("Ping:"),
-		infoItemValue.Render(fmt.Sprintf("%d ms", m.pingMs)),
+		infoItemValue.Foreground(lipgloss.Color(pingColor)).Render(fmt.Sprintf("%d ms", m.pingMs)),
 	)
 
 	motdInfoBoxContent := lipgloss.NewStyle().
@@ -443,9 +457,9 @@ func (m Model) View() string {
 
 		slotsInfoBoxContent,
 		pingInfoBoxContent,
-		motdInfoBoxContent.Render("MOTD: " + m.motd),
+		motdInfoBoxContent.Render("MOTD: "+m.motd),
 	)
-	
+
 	// players
 	playerPopup := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -460,13 +474,13 @@ func (m Model) View() string {
 		PaddingRight(1).
 		Width(leftColumnWidth).
 		Height(playerBoxHeight)
-	
+
 	if m.tabActiveIndex == 0 {
 		playerBox = playerBox.BorderForeground(lipgloss.Color(m.colors.borderActiveDark))
 	} else {
 		playerBox = playerBox.BorderForeground(lipgloss.Color(m.colors.borderDark))
 	}
-	
+
 	playerBoxItem := lipgloss.NewStyle().
 		Width(leftColumnWidth - 2).
 		Bold(true).Align(lipgloss.Left)
@@ -483,9 +497,9 @@ func (m Model) View() string {
 	}
 	for i, p := range m.players[player_start:] {
 		if i == m.playerActiveIndex && m.tabActiveIndex == 0 {
-			playerLines = append(playerLines, playerBoxItem.Background(lipgloss.Color(m.colors.borderDark)).Render("- " + p))
+			playerLines = append(playerLines, playerBoxItem.Background(lipgloss.Color(m.colors.borderDark)).Render("- "+p))
 		} else {
-			playerLines = append(playerLines, playerBoxItem.Render("- " + p))
+			playerLines = append(playerLines, playerBoxItem.Render("- "+p))
 		}
 	}
 
@@ -529,7 +543,7 @@ func (m Model) View() string {
 		PaddingLeft(1).
 		PaddingRight(1).
 		Width(rightColumnWidth - 2).Height(1)
-	
+
 	if m.tabActiveIndex == 1 {
 		inputStyle = inputStyle.BorderForeground(lipgloss.Color(m.colors.borderActiveDark))
 	} else {
@@ -544,7 +558,7 @@ func (m Model) View() string {
 
 	// detect log overflow - in future change way of displaying logs
 	m.logBlockYSize = lipgloss.Height(logBlock)
-	if m.logBlockYSize > contentHeight - 5 {
+	if m.logBlockYSize > contentHeight-5 {
 		return lipgloss.NewStyle().
 			Width(m.width).
 			Height(m.height).
@@ -582,12 +596,12 @@ func (m Model) View() string {
 		Foreground(lipgloss.Color(m.colors.textDark)).
 		Align(lipgloss.Center).
 		Render(m.players[m.playerActiveIndex])
-	
+
 	playerPopupSeparator := lipgloss.NewStyle().
 		Width(m.popup.width - 4).
 		Height(1).
 		Foreground(lipgloss.Color(m.colors.textDimmedDark)).
-		Render(strings.Repeat("-", m.popup.width - 4))
+		Render(strings.Repeat("-", m.popup.width-4))
 
 	playerPopupStatLabel := lipgloss.NewStyle().
 		Width((m.popup.width - 4) / 2).
@@ -604,9 +618,9 @@ func (m Model) View() string {
 			Foreground(lipgloss.Color(m.colors.textDark)).
 			Render(
 				fmt.Sprintf(
-					"[%.1f, %.1f, %.1f]", 
+					"[%.1f, %.1f, %.1f]",
 					m.popup.player.Pos.X,
-					m.popup.player.Pos.Y, 
+					m.popup.player.Pos.Y,
 					m.popup.player.Pos.Z,
 				),
 			),
@@ -617,8 +631,7 @@ func (m Model) View() string {
 		playerPopupStatLabel.Render("Health:"),
 		playerPopupStatValue.Foreground(
 			lipgloss.Color(m.colors.red)).
-			Render(AsciiBar(m.popup.player.Health/20, 20, "█", "░"),
-		),
+			Render(AsciiBar(m.popup.player.Health/20, 20, "█", "░")),
 	)
 
 	playerPopupStatsFood := lipgloss.JoinHorizontal(
@@ -626,8 +639,7 @@ func (m Model) View() string {
 		playerPopupStatLabel.Render("Food:"),
 		playerPopupStatValue.
 			Foreground(lipgloss.Color("173")).
-			Render(AsciiBar(float64(m.popup.player.Food)/20, 20, "█", "░"),
-		),
+			Render(AsciiBar(float64(m.popup.player.Food)/20, 20, "█", "░")),
 	)
 
 	playerPopupStatsXP := lipgloss.JoinHorizontal(
@@ -637,8 +649,8 @@ func (m Model) View() string {
 			Foreground(lipgloss.Color("114")).
 			Render(
 				fmt.Sprintf(
-					"%dlvl + (%.0f%%)", 
-					m.popup.player.XPLevel, 
+					"%dlvl + (%.0f%%)",
+					m.popup.player.XPLevel,
 					m.popup.player.XPProgress*100,
 				),
 			),
@@ -665,13 +677,13 @@ func (m Model) View() string {
 		playerPopupStatsDimension,
 		playerPopupStatsSelectedItem,
 	)
-	
+
 	playerPopupOption := lipgloss.NewStyle().
 		Bold(true).
 		Width((m.popup.width - 4) / len(m.popup.options)).
 		MarginTop(1).
 		Align(lipgloss.Center)
-	
+
 	optionsLines := []string{}
 	for i, o := range m.popup.options {
 		if m.popup.activeOptionIndex == i {
@@ -686,7 +698,7 @@ func (m Model) View() string {
 	}
 
 	playerPopupOptions := lipgloss.JoinHorizontal(
-		lipgloss.Center,	
+		lipgloss.Center,
 		optionsLines...,
 	)
 
@@ -765,7 +777,7 @@ func (m *Model) FetchPlayerDetails() {
 		return
 	}
 	m.popup.player.Health = health
-	
+
 	// food level
 	resp, err = m.rcon.Exec(fmt.Sprintf("data get entity %s foodLevel", playerName))
 	if err != nil {
@@ -778,7 +790,7 @@ func (m *Model) FetchPlayerDetails() {
 		return
 	}
 	m.popup.player.Food = food
-	
+
 	// xp level
 	resp, err = m.rcon.Exec(fmt.Sprintf("data get entity %s XpLevel", playerName))
 	if err != nil {
@@ -791,7 +803,7 @@ func (m *Model) FetchPlayerDetails() {
 		return
 	}
 	m.popup.player.XPLevel = xpLevel
-	
+
 	// xp progress
 	resp, err = m.rcon.Exec(fmt.Sprintf("data get entity %s XpP", playerName))
 	if err != nil {
@@ -804,7 +816,7 @@ func (m *Model) FetchPlayerDetails() {
 		return
 	}
 	m.popup.player.XPProgress = xpProgress
-	
+
 	// dimension
 	resp, err = m.rcon.Exec(fmt.Sprintf("data get entity %s Dimension", playerName))
 	if err != nil {
