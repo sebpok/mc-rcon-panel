@@ -106,6 +106,7 @@ type Model struct {
 	refreshIn   int
 
 	colors *Colors
+	styles *Styles
 
 	width  int
 	height int
