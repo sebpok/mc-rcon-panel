@@ -16,14 +16,16 @@ import (
 
 type tickMsg time.Time
 
+const ONE_TICK = 500 //ms
+
 type Styles struct {
 	borderColor       lipgloss.Color
 	borderColorActive lipgloss.Color
 
-	inputField lipgloss.Style
-}
+	inputField       lipgloss.Style
+	inputFieldActive lipgloss.Style
 
-func DefaultStyles() *Styles {
+	logBox lipgloss.Style
 }
 
 type Colors struct {
@@ -75,6 +77,13 @@ type Popup struct {
 	activeOptionIndex int
 }
 
+type Logs struct {
+	history []string
+	active  []string
+
+	maxLines int
+}
+
 type Model struct {
 	rcon *rcon.Client
 
@@ -93,12 +102,12 @@ type Model struct {
 	slots   string
 	motd    string
 
-	logs          []string
-	logBlockYSize int
-	err           error
+	err error
 
 	input textinput.Model
 	popup *Popup
+
+	logs *Logs
 
 	hasProperResolution bool
 
@@ -144,6 +153,18 @@ func NewModel(client *rcon.Client, host string, refreshRateInSeconds int) Model 
 		player: PlayerSnapshot{},
 	}
 
+	l := new(Logs)
+
+	s := &Styles{
+		borderColor:       "#666666",
+		borderColorActive: "#da77f2",
+
+		inputField: lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).PaddingLeft(1).PaddingRight(1).Height(1).BorderForeground(lipgloss.Color()),
+		inputFieldActive: lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).PaddingLeft(1).Height(1).BorderForeground(),
+
+		logBox:     lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).PaddingLeft(1),
+	}
+
 	ti := textinput.New()
 	ti.Placeholder = "Type commands here"
 	ti.Prompt = "/ "
@@ -152,13 +173,14 @@ func NewModel(client *rcon.Client, host string, refreshRateInSeconds int) Model 
 
 	return Model{
 		rcon:              client,
-		logs:              make([]string, 0),
+		logs:              l,
 		colors:            c,
 		refreshRate:       refreshRateInSeconds,
 		refreshIn:         0,
 		host:              host,
 		input:             ti,
 		playerActiveIndex: 0,
+		styles:            s,
 
 		tabs:           []string{"players", "cmds"},
 		tabActiveIndex: 0,
@@ -168,7 +190,7 @@ func NewModel(client *rcon.Client, host string, refreshRateInSeconds int) Model 
 }
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(1*time.Second, func(t time.Time) tea.Msg {
+	return tea.Tick(ONE_TICK*time.Millisecond, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -199,19 +221,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = err
 				return m, tickCmd()
 			}
-			current := mc.ParsePlayers(resp)
-			joined := mc.DiffAdded(m.prevPlayers, current)
-			left := mc.DiffRemoved(m.prevPlayers, current)
-			for _, p := range joined {
-				m.AppendLog(p + " joined the game")
-			}
-			for _, p := range left {
-				m.AppendLog(p + " left the game")
-			}
-			m.prevPlayers = current
-			m.players = current
+			m.players = mc.ParsePlayers(resp)
 
-			// FETCH MC SPECIFIC REQUEST DATA
+			// ------------ FETCH MC SPECIFIC REQUEST DATA ------------
 			data, ping, err := mc.Ping(m.host, "25565")
 			if err != nil {
 				m.err = err
@@ -513,75 +525,34 @@ func (m Model) View() string {
 		)),
 	)
 
-	// ---------- right column ------------
-	logBox := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(m.colors.borderDark)).
-		PaddingLeft(1).
-		PaddingRight(1).
-		Width(rightColumnWidth - 2).
-		Height(contentHeight - 3)
-
-	logBoxItem := lipgloss.NewStyle().
-		Bold(true).
-		Width(rightColumnWidth - 2)
-
-	maxLines := contentHeight - 5 // border top/bottom
-	if maxLines < 1 {
-		maxLines = 1
-	}
-	lines := []string{}
-	start := 0
-	if len(m.logs) > maxLines {
-		start = len(m.logs) - maxLines
-	}
-	for _, l := range m.logs[start:] {
-		lines = append(lines, logBoxItem.Render(l))
-	}
-
-	inputStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		PaddingLeft(1).
-		PaddingRight(1).
-		Width(rightColumnWidth - 2).Height(1)
-
-	if m.tabActiveIndex == 1 {
-		inputStyle = inputStyle.BorderForeground(lipgloss.Color(m.colors.borderActiveDark))
-	} else {
-		inputStyle = inputStyle.BorderForeground(lipgloss.Color(m.colors.borderDark))
+	// ---------- input ------------
+	inputHeight := 3
+	inputStyle := m.styles.inputField.Width(rightColumnWidth - 2).BorderForeground(lipgloss.Color(m.styles.borderColor))
+	if m.tabs[m.tabActiveIndex] == "cmds" {
+		inputStyle.UnsetBorderForeground()
+		inputStyle.BorderForeground(lipgloss.Color(m.styles.borderColorActive))
 	}
 	inputView := inputStyle.Render(m.input.View())
 
-	logBlock := lipgloss.JoinVertical(
-		lipgloss.Top,
-		lines...,
-	)
+	// ---------- logs  ------------
+	m.logs.maxLines = contentHeight - inputHeight
+	logBox := m.styles.logBox.Width(rightColumnWidth - 2).Height(contentHeight - inputHeight).BorderForeground(lipgloss.Color(m.styles.borderColor))
 
-	// detect log overflow - in future change way of displaying logs
-	m.logBlockYSize = lipgloss.Height(logBlock)
-	if m.logBlockYSize > contentHeight-5 {
-		return lipgloss.NewStyle().
-			Width(m.width).
-			Height(m.height).
-			Bold(true).
-			Foreground(lipgloss.Color(m.colors.red)).
-			AlignVertical(lipgloss.Center).
-			AlignHorizontal(lipgloss.Center).
-			Render("Logs overflowed, please clear logs with [ctrl+l]")
-	}
-
+	// ---------- right column assembly  ------------
 	rightColumn := lipgloss.JoinVertical(
 		lipgloss.Top,
-		logBox.Render(logBlock),
+		logBox.Render(),
 		inputView,
 	)
 
+	// ---------- body with all elements ------------
 	body := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		leftColumn,
 		rightColumn,
 	)
 
+	// ---------- render body if popup is hidden ------------
 	if !m.popup.shown {
 		return lipgloss.JoinVertical(
 			lipgloss.Center,
@@ -724,8 +695,8 @@ func itoa(i int) string {
 
 func (m *Model) AppendLog(log string) {
 	now := time.Now().Format("15:04:05")
-	m.logs = append(
-		m.logs,
+	m.logs.history = append(
+		m.logs.history,
 		fmt.Sprintf("[%s] %s", now, log),
 	)
 }
