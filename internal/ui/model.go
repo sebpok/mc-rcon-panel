@@ -10,6 +10,7 @@ import (
 	"sebpok/mc-rcon-tui/internal/rcon"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -77,13 +78,6 @@ type Popup struct {
 	activeOptionIndex int
 }
 
-type Logs struct {
-	history []string
-	active  []string
-
-	maxLines int
-}
-
 type Model struct {
 	rcon *rcon.Client
 
@@ -104,10 +98,11 @@ type Model struct {
 
 	err error
 
-	input textinput.Model
-	popup *Popup
+	input    textinput.Model
+	popup    *Popup
+	viewport viewport.Model
 
-	logs *Logs
+	logs []string
 
 	hasProperResolution bool
 
@@ -115,10 +110,35 @@ type Model struct {
 	refreshIn   int
 
 	colors *Colors
-	styles *Styles
+	styles Styles
 
 	width  int
 	height int
+
+	contentHeight    int
+	rightColumnWidth int
+	leftColumnWidth  int
+
+	ready bool
+}
+
+func DefaultStyles() Styles {
+	return Styles{
+		borderColor:       "#666666",
+		borderColorActive: "#da77f2",
+
+		inputField: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			PaddingLeft(1).
+			PaddingRight(1).
+			BorderForeground(lipgloss.Color("#666666")).
+			Height(1),
+
+		logBox: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#666666")).
+			PaddingLeft(1),
+	}
 }
 
 func NewModel(client *rcon.Client, host string, refreshRateInSeconds int) Model {
@@ -153,18 +173,6 @@ func NewModel(client *rcon.Client, host string, refreshRateInSeconds int) Model 
 		player: PlayerSnapshot{},
 	}
 
-	l := new(Logs)
-
-	s := &Styles{
-		borderColor:       "#666666",
-		borderColorActive: "#da77f2",
-
-		inputField: lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).PaddingLeft(1).PaddingRight(1).Height(1).BorderForeground(lipgloss.Color()),
-		inputFieldActive: lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).PaddingLeft(1).Height(1).BorderForeground(),
-
-		logBox:     lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).PaddingLeft(1),
-	}
-
 	ti := textinput.New()
 	ti.Placeholder = "Type commands here"
 	ti.Prompt = "/ "
@@ -173,14 +181,13 @@ func NewModel(client *rcon.Client, host string, refreshRateInSeconds int) Model 
 
 	return Model{
 		rcon:              client,
-		logs:              l,
 		colors:            c,
 		refreshRate:       refreshRateInSeconds,
 		refreshIn:         0,
 		host:              host,
 		input:             ti,
 		playerActiveIndex: 0,
-		styles:            s,
+		styles:            DefaultStyles(),
 
 		tabs:           []string{"players", "cmds"},
 		tabActiveIndex: 0,
@@ -189,23 +196,55 @@ func NewModel(client *rcon.Client, host string, refreshRateInSeconds int) Model 
 	}
 }
 
+type initMsg struct{}
+
+func initCmd() tea.Cmd {
+	return func() tea.Msg {
+		return initMsg{}
+	}
+}
+
 func tickCmd() tea.Cmd {
-	return tea.Tick(ONE_TICK*time.Millisecond, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
 
 func (m Model) Init() tea.Cmd {
-	return tickCmd()
+	return initCmd()
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 
+	case initMsg:
+		return m, tickCmd()
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+
+		m.leftColumnWidth = m.width / 3 - 2
+		m.rightColumnWidth = m.width - m.leftColumnWidth - 2
+		m.contentHeight = m.height - 4 
+
+		logBoxWidth := m.rightColumnWidth
+		logBoxHeight := m.contentHeight - 1
+
+		frameWidth, frameHeight := m.styles.logBox.GetFrameSize()
+
+		viewportWidth := logBoxWidth - frameWidth
+		viewportHeight := logBoxHeight - frameHeight
+
+		if !m.ready {
+			m.viewport = viewport.New(viewportWidth, viewportHeight)
+			m.ready = true
+		} else {
+			m.viewport.Width = viewportWidth
+			m.viewport.Height = viewportHeight
+		}
+
 		return m, nil
 
 	case tickMsg:
@@ -336,9 +375,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
-		case "ctrl+l":
-			m.logs = nil
-
 		case "ctrl+c", "esc":
 			if m.popup.shown {
 				m.popup.shown = false
@@ -352,7 +388,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	if m.width == 0 || m.height == 0 {
+	if !m.ready {
 		return "Loading..."
 	}
 
@@ -400,16 +436,12 @@ func (m Model) View() string {
 			SetString(m.err.Error()).Foreground(lipgloss.Color(m.colors.red))
 	} else {
 		footerBox = lipgloss.NewStyle().
-			SetString("[esc] Quit | [tab] Switch tabs | [ctrl+l] Clear logs | [arrows] Nav").Foreground(lipgloss.Color(m.colors.textDimmedDark))
+			SetString("[esc] Quit | [tab] Switch tabs | [arrows] Nav").Foreground(lipgloss.Color(m.colors.textDimmedDark))
 	}
 
 	// ------------- main content ------------------
-	contentHeight := m.height - 4
-	leftColumnWidth := int(float64(m.width) * 0.3)
-	rightColumnWidth := m.width - leftColumnWidth - 4
-
-	infoBoxHeight := int(float64(contentHeight) * 0.4)
-	playerBoxHeight := contentHeight - infoBoxHeight - 2
+	infoBoxHeight := int(float64(m.contentHeight) * 0.4)
+	playerBoxHeight := m.contentHeight - infoBoxHeight - 2
 
 	// ---------- right column ------------
 	infoBox := lipgloss.NewStyle().
@@ -417,18 +449,18 @@ func (m Model) View() string {
 		BorderForeground(lipgloss.Color(m.colors.borderDark)).
 		PaddingLeft(1).
 		PaddingRight(1).
-		Width(leftColumnWidth).
+		Width(m.leftColumnWidth).
 		Height(infoBoxHeight)
 
 	infoItemLabel := lipgloss.NewStyle().
-		Width(leftColumnWidth/2 - 2).
+		Width(m.leftColumnWidth/2 - 2).
 		Align(lipgloss.Left)
 	infoItemValue := lipgloss.NewStyle().
 		Bold(true).
-		Width(leftColumnWidth / 2).
+		Width(m.leftColumnWidth / 2).
 		Align(lipgloss.Right)
 	separatorStyle := lipgloss.NewStyle().
-		Width(leftColumnWidth).
+		Width(m.leftColumnWidth).
 		Height(1).
 		Foreground(lipgloss.Color(m.colors.textDimmedDark))
 
@@ -458,7 +490,7 @@ func (m Model) View() string {
 	)
 
 	motdInfoBoxContent := lipgloss.NewStyle().
-		Width(leftColumnWidth - 2).
+		Width(m.leftColumnWidth - 2).
 		Align(lipgloss.Left).
 		Foreground(lipgloss.Color(m.colors.textDimmedDark))
 
@@ -466,7 +498,7 @@ func (m Model) View() string {
 		lipgloss.Top,
 		versionInfoBoxContent,
 
-		separatorStyle.Render(strings.Repeat("-", leftColumnWidth-2)),
+		separatorStyle.Render(strings.Repeat("-", m.leftColumnWidth - 2)),
 
 		slotsInfoBoxContent,
 		pingInfoBoxContent,
@@ -485,7 +517,7 @@ func (m Model) View() string {
 		BorderStyle(lipgloss.RoundedBorder()).
 		PaddingLeft(1).
 		PaddingRight(1).
-		Width(leftColumnWidth).
+		Width(m.leftColumnWidth).
 		Height(playerBoxHeight)
 
 	if m.tabActiveIndex == 0 {
@@ -495,14 +527,14 @@ func (m Model) View() string {
 	}
 
 	playerBoxItem := lipgloss.NewStyle().
-		Width(leftColumnWidth - 2).
+		Width(m.leftColumnWidth - 2).
 		Bold(true).Align(lipgloss.Left)
 
 	playersMaxLines := playerBoxHeight - 2
 	playerLines := []string{}
 
 	playerLines = append(playerLines, playerBoxItem.Render("Online:"))
-	playerLines = append(playerLines, separatorStyle.Render(strings.Repeat("-", leftColumnWidth-2)))
+	playerLines = append(playerLines, separatorStyle.Render(strings.Repeat("-", m.leftColumnWidth - 2)))
 
 	player_start := 0
 	if len(m.players) > playersMaxLines {
@@ -526,22 +558,25 @@ func (m Model) View() string {
 	)
 
 	// ---------- input ------------
-	inputHeight := 3
-	inputStyle := m.styles.inputField.Width(rightColumnWidth - 2).BorderForeground(lipgloss.Color(m.styles.borderColor))
+	var inputStyle lipgloss.Style
 	if m.tabs[m.tabActiveIndex] == "cmds" {
-		inputStyle.UnsetBorderForeground()
-		inputStyle.BorderForeground(lipgloss.Color(m.styles.borderColorActive))
+		inputStyle = m.styles.inputField.
+			Width(m.rightColumnWidth - 2).
+			BorderForeground(lipgloss.Color(m.styles.borderColorActive))
+	} else {
+		inputStyle = m.styles.inputField.Width(m.rightColumnWidth - 2)
 	}
 	inputView := inputStyle.Render(m.input.View())
 
 	// ---------- logs  ------------
-	m.logs.maxLines = contentHeight - inputHeight
-	logBox := m.styles.logBox.Width(rightColumnWidth - 2).Height(contentHeight - inputHeight).BorderForeground(lipgloss.Color(m.styles.borderColor))
+	logBox := m.styles.logBox.Width(m.rightColumnWidth - 2).Height(m.contentHeight - 6)
 
 	// ---------- right column assembly  ------------
 	rightColumn := lipgloss.JoinVertical(
 		lipgloss.Top,
-		logBox.Render(),
+		logBox.Render(
+			m.viewport.View(),
+		),
 		inputView,
 	)
 
@@ -695,10 +730,15 @@ func itoa(i int) string {
 
 func (m *Model) AppendLog(log string) {
 	now := time.Now().Format("15:04:05")
-	m.logs.history = append(
-		m.logs.history,
+	m.logs = append(
+		m.logs,
 		fmt.Sprintf("[%s] %s", now, log),
 	)
+
+	content := strings.Join(m.logs, "\n")
+
+	m.viewport.SetContent(content)
+	m.viewport.GotoBottom()
 }
 
 func (m *Model) FetchPlayerDetails() {
