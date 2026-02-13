@@ -17,16 +17,16 @@ import (
 
 type tickMsg time.Time
 
-const ONE_TICK = 500 //ms
-
 type Styles struct {
 	borderColor       lipgloss.Color
 	borderColorActive lipgloss.Color
+	textDark          lipgloss.Color
+	textDimmedDark    lipgloss.Color
 
-	inputField       lipgloss.Style
-	inputFieldActive lipgloss.Style
-
-	logBox lipgloss.Style
+	inputField     lipgloss.Style
+	logBox         lipgloss.Style
+	title          lipgloss.Style
+	programVersion lipgloss.Style
 }
 
 type Colors struct {
@@ -123,22 +123,34 @@ type Model struct {
 }
 
 func DefaultStyles() Styles {
-	return Styles{
-		borderColor:       "#666666",
-		borderColorActive: "#da77f2",
-
-		inputField: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			PaddingLeft(1).
-			PaddingRight(1).
-			BorderForeground(lipgloss.Color("#666666")).
-			Height(1),
-
-		logBox: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#666666")).
-			PaddingLeft(1),
+	s := Styles{
+		borderColor:       lipgloss.Color("#666666"),
+		borderColorActive: lipgloss.Color("#da77f2"),
+		textDark:          lipgloss.Color("#eebefa"),
+		textDimmedDark:    lipgloss.Color("#555555"),
 	}
+
+	s.inputField = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		PaddingLeft(1).
+		PaddingRight(1).
+		BorderForeground(s.borderColor).
+		Height(1)
+
+	s.logBox = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(s.borderColor).
+		PaddingLeft(1)
+
+	s.title = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(s.textDark).
+		Align(lipgloss.Center)
+
+	s.programVersion = lipgloss.NewStyle().
+		Foreground(s.textDimmedDark)
+
+	return s
 }
 
 func NewModel(client *rcon.Client, host string, refreshRateInSeconds int) Model {
@@ -225,9 +237,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		m.leftColumnWidth = m.width / 3 - 2
+		m.leftColumnWidth = m.width/3 - 2
 		m.rightColumnWidth = m.width - m.leftColumnWidth - 2
-		m.contentHeight = m.height - 4 
+		m.contentHeight = m.height - 4
 
 		logBoxWidth := m.rightColumnWidth
 		logBoxHeight := m.contentHeight - 1
@@ -406,26 +418,21 @@ func (m Model) View() string {
 
 	// ------------- header ------------------
 	headerWidth := m.width
-	titleBox := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(m.colors.textDark)).
-		Width(headerWidth / 3).
-		Align(lipgloss.Center).
-		SetString("Minecraft RCON console")
+
+	titleBox := m.styles.title.Width(headerWidth / 3)
+	programVersionBox := m.styles.programVersion.Width(headerWidth / 3)
+
 	refreshBox := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(m.colors.textDark)).
 		Width(headerWidth / 3).
 		Align(lipgloss.Right).
 		SetString(fmt.Sprintf("Refresh in: %d", m.refreshIn))
-	versionBox := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.colors.textDimmedDark)).
-		Width(headerWidth / 3).
-		SetString("v0.5")
+
 	headerBox := lipgloss.JoinHorizontal(
 		lipgloss.Center,
-		versionBox.Render(),
-		titleBox.Render(),
+		programVersionBox.Render("v0.5"),
+		titleBox.Render("Minecraft RCON Console"),
 		refreshBox.Render(),
 	)
 
@@ -498,7 +505,7 @@ func (m Model) View() string {
 		lipgloss.Top,
 		versionInfoBoxContent,
 
-		separatorStyle.Render(strings.Repeat("-", m.leftColumnWidth - 2)),
+		separatorStyle.Render(strings.Repeat("-", m.leftColumnWidth-2)),
 
 		slotsInfoBoxContent,
 		pingInfoBoxContent,
@@ -534,7 +541,7 @@ func (m Model) View() string {
 	playerLines := []string{}
 
 	playerLines = append(playerLines, playerBoxItem.Render("Online:"))
-	playerLines = append(playerLines, separatorStyle.Render(strings.Repeat("-", m.leftColumnWidth - 2)))
+	playerLines = append(playerLines, separatorStyle.Render(strings.Repeat("-", m.leftColumnWidth-2)))
 
 	player_start := 0
 	if len(m.players) > playersMaxLines {
