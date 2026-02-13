@@ -233,7 +233,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		logBoxHeight := m.contentHeight - 1
 
 		frameWidth, frameHeight := m.styles.logBox.GetFrameSize()
-
 		viewportWidth := logBoxWidth - frameWidth
 		viewportHeight := logBoxHeight - frameHeight
 
@@ -252,7 +251,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.FetchPlayerDetails()
 		}
 
-		m.refreshIn--
 		if m.refreshIn <= 0 {
 			// PLAYERS FETCH
 			resp, err := m.rcon.Exec("list")
@@ -281,6 +279,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.motd = motd
 
 			m.refreshIn = m.refreshRate
+		} else {
+			m.refreshIn--
 		}
 		return m, tickCmd()
 
@@ -421,7 +421,7 @@ func (m Model) View() string {
 	versionBox := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.colors.textDimmedDark)).
 		Width(headerWidth / 3).
-		SetString("v0.1")
+		SetString("v0.5")
 	headerBox := lipgloss.JoinHorizontal(
 		lipgloss.Center,
 		versionBox.Render(),
