@@ -3,12 +3,14 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	"sebpok/mc-rcon-tui/internal/mc"
 	"sebpok/mc-rcon-tui/internal/rcon"
 
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -91,14 +93,37 @@ func (p playerItem) Title() string       { return string(p) }
 func (p playerItem) Description() string { return "" }
 func (p playerItem) FilterValue() string { return string(p) }
 
+
+var (
+    selectedStyle   = lipgloss.NewStyle().Background(lipgloss.Color("#666666")).Bold(true)
+    unselectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA"))
+)
+type customDelegate struct{}
+func (d customDelegate) Height() int { return 1 }  // only one line
+func (d customDelegate) Spacing() int { return 0 }
+func (d customDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
+    return nil
+}
+func (d customDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+    i := listItem.(playerItem)
+
+    var s string
+    if index == m.Index() {
+        s = selectedStyle.Render(i.Title())
+    } else {
+        s = unselectedStyle.Render(i.Title())
+    }
+
+    fmt.Fprint(w, "- " + s)
+}
+
 type Model struct {
 	rcon *rcon.Client
 
 	host string
 	port string
 
-	prevPlayers       []string
-	players           []string
+	players           list.Model
 	playerActiveIndex int
 
 	tabActiveIndex int
@@ -209,6 +234,7 @@ func NewModel(client *rcon.Client, host string, refreshRateInSeconds int) Model 
 		player: PlayerSnapshot{},
 	}
 
+
 	ti := textinput.New()
 	ti.Placeholder = "Type commands here"
 	ti.Prompt = "/ "
@@ -272,17 +298,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		viewportWidth := logBoxWidth - frameWidth
 		viewportHeight := logBoxHeight - frameHeight
 
+		playersWidth := m.leftColumnWidth - frameWidth
+		playersHeight := m.contentHeight - 1 - int(float64(m.contentHeight) * 0.4) - frameHeight
+
 		if !m.ready {
 			m.viewport = viewport.New(viewportWidth, viewportHeight)
+
+			l := list.New([]list.Item{}, customDelegate{}, playersWidth, playersHeight)
+			l.Title = "Online"
+			l.SetShowStatusBar(false)
+			l.SetShowHelp(false)
+			l.SetFilteringEnabled(false)
+			m.players = l
+
 			m.ready = true
 		} else {
+			// logs
 			m.viewport.Width = viewportWidth
 			m.viewport.Height = viewportHeight
-
 			content := strings.Join(m.logs, "\n")
 			content = wordwrap.String(content, m.viewport.Width)
 			m.viewport.SetContent(content)
 			m.viewport.GotoBottom()
+
+			// players list
+			m.players.SetWidth(playersWidth)
+			m.players.SetHeight(playersHeight)
 		}
 
 		return m, nil
@@ -299,7 +340,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = err
 				return m, tickCmd()
 			}
-			m.players = mc.ParsePlayers(resp)
+
+			players := mc.ParsePlayers(resp)
+			playersForList := make([]list.Item, len(players))
+			for i, p := range players {
+				playersForList[i] = playerItem(p)
+			}
+			m.players.SetItems(playersForList)
 
 			// ------------ FETCH MC SPECIFIC REQUEST DATA ------------
 			data, ping, err := mc.Ping(m.host, "25565")
@@ -344,22 +391,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.Blur()
 			}
 
-		case "up", "k":
-			if m.tabActiveIndex == 0 && len(m.players) > 0 && !m.popup.shown {
-				m.playerActiveIndex--
-				if m.playerActiveIndex < 0 {
-					m.playerActiveIndex = len(m.players) - 1
-				}
-			}
-
-		case "down", "j":
-			if m.tabActiveIndex == 0 && len(m.players) > 0 && !m.popup.shown {
-				m.playerActiveIndex++
-				if m.playerActiveIndex >= len(m.players) {
-					m.playerActiveIndex = 0
-				}
-			}
-
 		case "left", "h":
 			if m.popup.shown {
 				m.popup.activeOptionIndex--
@@ -393,17 +424,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 			case "players":
-				if !m.popup.shown && len(m.players) > 0 {
+				if !m.popup.shown {
 					m.popup.shown = true
 					m.FetchPlayerDetails()
 				} else {
-					if len(m.players) > 0 {
-						player := m.players[m.playerActiveIndex]
+					if len(m.players.Items()) > 0 {
+						player := m.players.SelectedItem()
 						option := m.popup.options[m.popup.activeOptionIndex]
 						cmd := fmt.Sprintf(option.cmd, player)
-
 						m.AppendLog("> " + cmd)
-
 						m.popup.shown = false
 
 						resp, err := m.rcon.Exec(cmd)
@@ -429,6 +458,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if m.tabs[m.tabActiveIndex] == "players" {
+		m.players, cmd = m.players.Update(msg)
+	}
 	return m, cmd
 }
 
@@ -537,41 +569,10 @@ func (m Model) View() string {
 		Width(m.leftColumnWidth).
 		Height(playerBoxHeight)
 
-	if m.tabActiveIndex == 0 {
-		playerBox = playerBox.BorderForeground(lipgloss.Color(m.colors.borderActiveDark))
-	} else {
-		playerBox = playerBox.BorderForeground(lipgloss.Color(m.colors.borderDark))
-	}
-
-	playerBoxItem := lipgloss.NewStyle().
-		Width(m.leftColumnWidth - 2).
-		Bold(true).Align(lipgloss.Left)
-
-	playersMaxLines := playerBoxHeight - 2
-	playerLines := []string{}
-
-	playerLines = append(playerLines, playerBoxItem.Render("Online:"))
-	playerLines = append(playerLines, m.styles.separator.Render(strings.Repeat("-", m.leftColumnWidth-2)))
-
-	player_start := 0
-	if len(m.players) > playersMaxLines {
-		player_start = len(m.players) - playersMaxLines
-	}
-	for i, p := range m.players[player_start:] {
-		if i == m.playerActiveIndex && m.tabActiveIndex == 0 {
-			playerLines = append(playerLines, playerBoxItem.Background(lipgloss.Color(m.colors.borderDark)).Render("- "+p))
-		} else {
-			playerLines = append(playerLines, playerBoxItem.Render("- "+p))
-		}
-	}
-
 	leftColumn := lipgloss.JoinVertical(
 		lipgloss.Top,
 		infoBox.Render(infoBoxContent),
-		playerBox.Render(lipgloss.JoinVertical(
-			lipgloss.Top,
-			playerLines...,
-		)),
+		playerBox.Render(m.players.View()),
 	)
 
 	// ---------- input ------------
@@ -621,7 +622,7 @@ func (m Model) View() string {
 		Width(m.popup.width - 4).
 		Foreground(lipgloss.Color(m.colors.textDark)).
 		Align(lipgloss.Center).
-		Render(m.players[m.playerActiveIndex])
+		Render(m.popup.player.Nickname)
 
 	playerPopupSeparator := lipgloss.NewStyle().
 		Width(m.popup.width - 4).
@@ -764,7 +765,9 @@ func (m *Model) AppendLog(log string) {
 }
 
 func (m *Model) FetchPlayerDetails() {
-	playerName := m.players[m.playerActiveIndex]
+	selected := m.players.SelectedItem()
+	playerName := string(selected.(playerItem))
+	m.popup.player.Nickname = playerName
 
 	//check if player is still online
 	resp, err := m.rcon.Exec("list")
