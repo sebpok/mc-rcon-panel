@@ -86,6 +86,11 @@ type Popup struct {
 	activeOptionIndex int
 }
 
+type playerItem string
+func (p playerItem) Title() string       { return string(p) }
+func (p playerItem) Description() string { return "" }
+func (p playerItem) FilterValue() string { return string(p) }
+
 type Model struct {
 	rcon *rcon.Client
 
