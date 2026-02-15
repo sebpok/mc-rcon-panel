@@ -411,6 +411,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case "ctrl+l":
+			m.logs = nil
+			m.viewport.SetContent("")
+
 		case "ctrl+c", "esc":
 			if m.popup.shown {
 				m.popup.shown = false
@@ -458,7 +462,7 @@ func (m Model) View() string {
 			SetString(m.err.Error()).Foreground(lipgloss.Color(m.colors.red))
 	} else {
 		footerBox = lipgloss.NewStyle().
-			SetString("[esc] Quit | [tab] Switch tabs | [arrows] Nav").Foreground(lipgloss.Color(m.colors.textDimmedDark))
+			SetString("[esc] Quit | [tab] Switch tabs | [ctrl+l] Clear logs").Foreground(lipgloss.Color(m.colors.textDimmedDark))
 	}
 
 	// ------------- main content ------------------
