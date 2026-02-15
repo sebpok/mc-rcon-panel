@@ -506,7 +506,7 @@ func (m Model) View() string {
 	refreshBox := m.styles.refreshInfo.Width(m.width / 3)
 	headerBox := lipgloss.JoinHorizontal(
 		lipgloss.Center,
-		programVersionBox.Render("v1.0"),
+		programVersionBox.Render("v1.1"),
 		titleBox.Render("Minecraft RCON Console"),
 		refreshBox.Render(fmt.Sprintf("Refresh in: %d", m.refreshIn)),
 	)
