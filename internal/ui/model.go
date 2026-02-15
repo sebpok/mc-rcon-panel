@@ -13,6 +13,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/muesli/reflow/wordwrap"
 )
 
 type tickMsg time.Time
@@ -271,6 +273,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.viewport.Width = viewportWidth
 			m.viewport.Height = viewportHeight
+
+			content := strings.Join(m.logs, "\n")
+			content = wordwrap.String(content, m.viewport.Width)
+			m.viewport.SetContent(content)
+			m.viewport.GotoBottom()
 		}
 
 		return m, nil
@@ -570,14 +577,16 @@ func (m Model) View() string {
 	inputView := inputStyle.Render(m.input.View())
 
 	// ---------- logs  ------------
-	logBox := m.styles.box.Width(m.rightColumnWidth - 2).Height(m.contentHeight - 6)
 
 	// ---------- right column assembly  ------------
 	rightColumn := lipgloss.JoinVertical(
 		lipgloss.Top,
-		logBox.Render(
-			m.viewport.View(),
-		),
+		m.styles.box.
+			Width(m.rightColumnWidth - 2).
+			Height(infoBoxHeight - 6).
+			Render(
+				m.viewport.View(),
+			),
 		inputView,
 	)
 
@@ -738,6 +747,7 @@ func (m *Model) AppendLog(log string) {
 
 	content := strings.Join(m.logs, "\n")
 
+	content = wordwrap.String(content, m.viewport.Width)
 	m.viewport.SetContent(content)
 	m.viewport.GotoBottom()
 }
