@@ -740,6 +740,8 @@ func itoa(i int) string {
 
 func (m *Model) AppendLog(log string) {
 	now := time.Now().Format("15:04:05")
+	log = mc.RemoveColorCodes(log)
+
 	m.logs = append(
 		m.logs,
 		fmt.Sprintf("[%s] %s", now, log),

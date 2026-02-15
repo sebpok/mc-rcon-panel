@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+func RemoveColorCodes(input string) string {
+	re := regexp.MustCompile(`§[0-9a-fk-or]`)
+	return re.ReplaceAllString(input, "")
+}
+
 func parseTrailingInt(input string) (int, error) {
 	input = strings.TrimSpace(input)
 
