@@ -19,6 +19,8 @@ import (
 
 type tickMsg time.Time
 
+var divide_ratio float64 = 0.4
+
 type Styles struct {
 	borderStyle 	 lipgloss.Border
 
@@ -109,6 +111,8 @@ type Model struct {
 	input    textinput.Model
 	popup    *Popup
 	viewport viewport.Model
+
+	playersViewport viewport.Model
 
 	logs []string
 
@@ -263,17 +267,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		logBoxWidth := m.rightColumnWidth
 		logBoxHeight := m.contentHeight - 1
 
-		frameWidth, frameHeight := m.styles.box.GetFrameSize()
-		viewportWidth := logBoxWidth - frameWidth
-		viewportHeight := logBoxHeight - frameHeight
+		boxWidth, boxHeight := m.styles.box.GetFrameSize()
+		logViewportWidth := logBoxWidth - boxWidth
+		logViewportHeight := logBoxHeight - boxHeight
+
+		playersViewportWidth := m.leftColumnWidth - boxWidth
+		playersViewportHeight := m.contentHeight - int(float64(m.contentHeight) * 0.4) - boxHeight
 
 		if !m.ready {
-			m.viewport = viewport.New(viewportWidth, viewportHeight)
+			m.viewport = viewport.New(logViewportWidth, logViewportHeight)
+			m.playersViewport = viewport.New(playersViewportWidth, playersViewportHeight)
 			m.ready = true
 		} else {
-			m.viewport.Width = viewportWidth
-			m.viewport.Height = viewportHeight
+			// players
+			m.playersViewport.Width = playersViewportWidth
+			m.playersViewport.Height = playersViewportHeight
 
+			// logs
+			m.viewport.Width = logViewportWidth
+			m.viewport.Height = logViewportHeight
 			content := strings.Join(m.logs, "\n")
 			content = wordwrap.String(content, m.viewport.Width)
 			m.viewport.SetContent(content)
@@ -466,7 +478,7 @@ func (m Model) View() string {
 	}
 
 	// ------------- main content ------------------
-	infoBoxHeight := int(float64(m.contentHeight) * 0.4)
+	infoBoxHeight := int(float64(m.contentHeight) * divide_ratio)
 	playerBoxHeight := m.contentHeight - infoBoxHeight - 2
 
 	// ---------- left column ------------
@@ -523,7 +535,7 @@ func (m Model) View() string {
 	// players
 	playerPopup := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(m.colors.borderDark)).
+		BorderForeground(lipgloss.Color(m.styles.borderColor)).
 		Padding(1, 2).
 		Width(m.popup.width).
 		Height(m.popup.height)
@@ -533,40 +545,15 @@ func (m Model) View() string {
 		Height(playerBoxHeight)
 
 	if m.tabActiveIndex == 0 {
-		playerBox = playerBox.BorderForeground(lipgloss.Color(m.colors.borderActiveDark))
+		playerBox = playerBox.BorderForeground(m.styles.borderColorActive)
 	} else {
-		playerBox = playerBox.BorderForeground(lipgloss.Color(m.colors.borderDark))
-	}
-
-	playerBoxItem := lipgloss.NewStyle().
-		Width(m.leftColumnWidth - 2).
-		Bold(true).Align(lipgloss.Left)
-
-	playersMaxLines := playerBoxHeight - 2
-	playerLines := []string{}
-
-	playerLines = append(playerLines, playerBoxItem.Render("Online:"))
-	playerLines = append(playerLines, m.styles.separator.Render(strings.Repeat("-", m.leftColumnWidth-2)))
-
-	player_start := 0
-	if len(m.players) > playersMaxLines {
-		player_start = len(m.players) - playersMaxLines
-	}
-	for i, p := range m.players[player_start:] {
-		if i == m.playerActiveIndex && m.tabActiveIndex == 0 {
-			playerLines = append(playerLines, playerBoxItem.Background(lipgloss.Color(m.colors.borderDark)).Render("- "+p))
-		} else {
-			playerLines = append(playerLines, playerBoxItem.Render("- "+p))
-		}
+		playerBox = playerBox.BorderForeground(m.styles.borderColor)
 	}
 
 	leftColumn := lipgloss.JoinVertical(
 		lipgloss.Top,
 		infoBox.Render(infoBoxContent),
-		playerBox.Render(lipgloss.JoinVertical(
-			lipgloss.Top,
-			playerLines...,
-		)),
+		playerBox.Render(m.playersViewport.View()),
 	)
 
 	// ---------- input ------------
