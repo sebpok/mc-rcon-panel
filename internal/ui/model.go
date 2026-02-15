@@ -261,7 +261,7 @@ func NewModel(client *rcon.Client, host string, refreshRateInSeconds int) Model 
 		rcon:              client,
 		colors:            c,
 		refreshRate:       refreshRateInSeconds,
-		refreshIn:         0,
+		refreshIn:         refreshRateInSeconds,
 		host:              host,
 		input:             ti,
 		playerActiveIndex: 0,
@@ -290,6 +290,37 @@ func tickCmd() tea.Cmd {
 
 func (m Model) Init() tea.Cmd {
 	return initCmd()
+}
+
+func (m *Model) FetchData() {
+	// PLAYERS FETCH
+	resp, err := m.rcon.Exec("list")
+	if err != nil {
+		m.err = err
+	}
+
+	players := mc.ParsePlayers(resp)
+	playersForList := make([]list.Item, len(players))
+	for i, p := range players {
+		playersForList[i] = playerItem(p)
+	}
+	m.players.SetItems(playersForList)
+
+	// ------------ FETCH MC SPECIFIC REQUEST DATA ------------
+	data, ping, err := mc.Ping(m.host, "25565")
+	if err != nil {
+		m.err = err
+	}
+	m.pingMs = ping.Milliseconds()
+	m.version = data.Version.Name
+	m.slots = fmt.Sprintf("%d/%d", data.Players.Online, data.Players.Max)
+
+	var motd string
+	err = json.Unmarshal(data.Description, &motd)
+	if err != nil {
+		m.err = err
+	}
+	m.motd = motd
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -327,6 +358,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			l.SetShowTitle(false)
 			m.players = l
 
+			m.FetchData()
 			m.ready = true
 		} else {
 			// logs
@@ -350,38 +382,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.refreshIn <= 0 {
-			// PLAYERS FETCH
-			resp, err := m.rcon.Exec("list")
-			if err != nil {
-				m.err = err
-				return m, tickCmd()
-			}
-
-			players := mc.ParsePlayers(resp)
-			playersForList := make([]list.Item, len(players))
-			for i, p := range players {
-				playersForList[i] = playerItem(p)
-			}
-			m.players.SetItems(playersForList)
-
-			// ------------ FETCH MC SPECIFIC REQUEST DATA ------------
-			data, ping, err := mc.Ping(m.host, "25565")
-			if err != nil {
-				m.err = err
-				return m, tickCmd()
-			}
-			m.pingMs = ping.Milliseconds()
-			m.version = data.Version.Name
-			m.slots = fmt.Sprintf("%d/%d", data.Players.Online, data.Players.Max)
-
-			var motd string
-			err = json.Unmarshal(data.Description, &motd)
-			if err != nil {
-				m.err = err
-				return m, tickCmd()
-			}
-			m.motd = motd
-
+			m.FetchData()
 			m.refreshIn = m.refreshRate
 		} else {
 			m.refreshIn--
@@ -396,15 +397,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 
 		case "tab":
-			m.tabActiveIndex++
-			if m.tabActiveIndex >= len(m.tabs) {
-				m.tabActiveIndex = 0
-			}
+			if !m.popup.shown {
+				m.tabActiveIndex++
+				if m.tabActiveIndex >= len(m.tabs) {
+					m.tabActiveIndex = 0
+				}
 
-			if m.tabs[m.tabActiveIndex] == "cmds" {
-				m.input.Focus()
-			} else {
-				m.input.Blur()
+				if m.tabs[m.tabActiveIndex] == "cmds" {
+					m.input.Focus()
+				} else {
+					m.input.Blur()
+				}
 			}
 
 		case "left", "h":
@@ -440,7 +443,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 			case "players":
-				if !m.popup.shown {
+				if !m.popup.shown && len(m.players.Items()) > 0 {
 					m.popup.shown = true
 					m.FetchPlayerDetails()
 				} else {
