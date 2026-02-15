@@ -37,6 +37,10 @@ type Styles struct {
 	title          lipgloss.Style
 	refreshInfo	   lipgloss.Style
 	programVersion lipgloss.Style
+
+	playersTitle lipgloss.Style
+	playerLabel lipgloss.Style
+	playerLabelSelected lipgloss.Style
 }
 
 type Colors struct {
@@ -93,12 +97,11 @@ func (p playerItem) Title() string       { return string(p) }
 func (p playerItem) Description() string { return "" }
 func (p playerItem) FilterValue() string { return string(p) }
 
-
-var (
-    selectedStyle   = lipgloss.NewStyle().Background(lipgloss.Color("#666666")).Bold(true)
-    unselectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA"))
-)
-type customDelegate struct{}
+type customDelegate struct{
+	playerInactiveStyle lipgloss.Style
+	playerActiveStyle lipgloss.Style
+	labelWidth int
+}
 func (d customDelegate) Height() int { return 1 }  // only one line
 func (d customDelegate) Spacing() int { return 0 }
 func (d customDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
@@ -107,11 +110,11 @@ func (d customDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 func (d customDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
     i := listItem.(playerItem)
 
-    var s string
+	var s string
     if index == m.Index() {
-        s = selectedStyle.Render(i.Title())
+        s = d.playerActiveStyle.Width(d.labelWidth).Render(i.Title())
     } else {
-        s = unselectedStyle.Render(i.Title())
+        s = d.playerInactiveStyle.Width(d.labelWidth).Render(i.Title())
     }
 
     fmt.Fprint(w, "- " + s)
@@ -198,6 +201,19 @@ func DefaultStyles() Styles {
 
 	s.programVersion = lipgloss.NewStyle().
 		Foreground(s.textDimmedDark)
+
+	s.playersTitle = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(s.textDark).
+		Padding(0, 0).
+		Margin(0, 0, 0, 0)
+
+	s.playerLabel = lipgloss.NewStyle().
+		Bold(true)
+	
+	s.playerLabelSelected = lipgloss.NewStyle().
+		Bold(true).
+		Background(lipgloss.Color(s.textDimmedDark))
 
 	return s
 }
@@ -304,11 +320,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.ready {
 			m.viewport = viewport.New(viewportWidth, viewportHeight)
 
-			l := list.New([]list.Item{}, customDelegate{}, playersWidth, playersHeight)
-			l.Title = "Online"
+			l := list.New([]list.Item{}, customDelegate{playerInactiveStyle: m.styles.playerLabel, playerActiveStyle: m.styles.playerLabelSelected, labelWidth: playersWidth}, playersWidth, playersHeight)
 			l.SetShowStatusBar(false)
 			l.SetShowHelp(false)
 			l.SetFilteringEnabled(false)
+			l.SetShowTitle(false)
 			m.players = l
 
 			m.ready = true
@@ -565,14 +581,22 @@ func (m Model) View() string {
 		Width(m.popup.width).
 		Height(m.popup.height)
 
+	var playerBoxBorder lipgloss.Color
+	if m.tabs[m.tabActiveIndex] == "players" {
+		playerBoxBorder = m.styles.borderColorActive
+	} else {
+		playerBoxBorder = m.styles.borderColor
+	}
+
 	playerBox := m.styles.box.
 		Width(m.leftColumnWidth).
-		Height(playerBoxHeight)
+		Height(playerBoxHeight).
+		BorderForeground(playerBoxBorder)
 
 	leftColumn := lipgloss.JoinVertical(
 		lipgloss.Top,
 		infoBox.Render(infoBoxContent),
-		playerBox.Render(m.players.View()),
+		playerBox.Render("Online:\n" + m.players.View()),
 	)
 
 	// ---------- input ------------
