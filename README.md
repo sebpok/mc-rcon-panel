@@ -1,5 +1,6 @@
 # Minecraft RCON Console
 
+Showcase
 ![hippo](https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExZ2d0MnpkcDZvb291MHlpdDl5ZjFjeTE1YjhzcmxteWpsNmdkOW9ibyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/71B9GnelDwHxKaQHQ9/giphy.gif)
 
 ## Features:
