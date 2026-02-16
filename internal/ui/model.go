@@ -459,6 +459,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.err = err
 						}
 						m.AppendLog(resp)
+						m.FetchData()
 					}
 				}
 			}

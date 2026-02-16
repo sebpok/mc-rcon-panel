@@ -14,7 +14,7 @@ import (
 func main() {
 	host := flag.String("host", "localhost", "RCON address")
 	port := flag.Int("port", 25575, "RCON port")
-	pass := flag.String("password", "", "RCON password")
+	pass := flag.String("password", "kopbes", "RCON password")
 	flag.Parse()
 
 	if *pass == "" {
